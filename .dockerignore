@@ -1,0 +1,38 @@
+# Git files
+.git/
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Build artifacts
+*.sarif
+*.json
+*.html
+*.txt
+
+# Temporary files
+*.tmp
+*.temp
+test-*.json
+test-*.html
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker files
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# GitHub Actions
+.github/
+
+# Test files
+test-docker.sh

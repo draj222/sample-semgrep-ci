@@ -1,0 +1,44 @@
+name: Docker Semgrep Security Scan
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  security-scan:
+    name: Security Scan with Custom Semgrep
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Build Semgrep Docker image
+        run: |
+          docker build -t semgrep-custom:latest .
+          
+      - name: Run Semgrep security scan
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            semgrep-custom:latest \
+            ${{ github.sha }} \
+            ${{ github.repositoryUrl }} \
+            --output-format sarif \
+            --output-file semgrep-results.sarif
+            
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: semgrep-results.sarif
+        if: always()
+        
+      - name: Save scan results as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: semgrep-scan-results
+          path: semgrep-results.sarif
+        if: always()

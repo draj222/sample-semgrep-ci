@@ -1,0 +1,20 @@
+rules:
+  - id: php-rce
+    patterns:
+      - pattern: |
+          eval($USER_INPUT)
+      - pattern: |
+          exec($USER_INPUT)
+      - pattern: |
+          system($USER_INPUT)
+      - pattern: |
+          shell_exec($USER_INPUT)
+      - pattern: |
+          passthru($USER_INPUT)
+      - pattern: |
+          `$USER_INPUT`
+    message: "Remote code execution: User input directly used in code execution functions"
+    severity: ERROR
+    languages: [php]
+    category: security
+    tags: [rce, remote-code-execution, user-input]

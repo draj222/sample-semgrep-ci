@@ -1,0 +1,14 @@
+rules:
+  - id: js-sqli
+    patterns:
+      - pattern: |
+          $QUERY = "SELECT * FROM users WHERE id = " + $USER_INPUT
+      - pattern: |
+          $QUERY = `SELECT * FROM users WHERE id = ${$USER_INPUT}`
+      - pattern: |
+          $QUERY = "SELECT * FROM users WHERE id = " + $USER_INPUT + " AND name = '" + $NAME + "'"
+    message: "SQL injection: User input directly concatenated into SQL queries"
+    severity: ERROR
+    languages: [javascript, typescript]
+    category: security
+    tags: [sqli, sql-injection, user-input]

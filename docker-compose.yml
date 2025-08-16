@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  semgrep-scanner:
+    build: .
+    image: semgrep-custom:latest
+    container_name: semgrep-scanner
+    volumes:
+      # Mount current directory to access output files
+      - .:/workspace
+      # Mount custom rules (optional, already copied in image)
+      - ./custom-semgrep-rules:/app/custom-semgrep-rules:ro
+    working_dir: /workspace
+    environment:
+      - SEMGREP_VERSION=${SEMGREP_VERSION:-latest}
+    # Example usage (uncomment to run automatically)
+    # command: ["abc123", "https://github.com/user/repo.git", "--output-format", "sarif"]
+    # Or run interactively with: docker-compose run --rm semgrep-scanner

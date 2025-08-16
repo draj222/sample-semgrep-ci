@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Semgrep Security Scan Report</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8f9fa;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .summary-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .summary-card h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .summary-card .number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .severity-high { color: #dc3545; }
+        .severity-medium { color: #fd7e14; }
+        .severity-low { color: #28a745; }
+        .severity-info { color: #17a2b8; }
+        
+        .findings-section {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+        
+        .findings-header {
+            background: #f8f9fa;
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .findings-header h2 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .findings-header .description {
+            color: #6c757d;
+        }
+        
+        .finding-item {
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+            transition: background-color 0.2s;
+        }
+        
+        .finding-item:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .finding-item:last-child {
+            border-bottom: none;
+        }
+        
+        .finding-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .finding-title {
+            font-weight: bold;
+            color: #333;
+            font-size: 1.1em;
+        }
+        
+        .finding-severity {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .severity-error { background-color: #f8d7da; color: #721c24; }
+        .severity-warning { background-color: #fff3cd; color: #856404; }
+        .severity-note { background-color: #d1ecf1; color: #0c5460; }
+        
+        .finding-message {
+            color: #495057;
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+        
+        .finding-details {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9em;
+            overflow-x: auto;
+        }
+        
+        .finding-location {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+        
+        .finding-tags {
+            margin-top: 10px;
+        }
+        
+        .tag {
+            display: inline-block;
+            background: #e9ecef;
+            color: #495057;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        
+        .no-findings {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+        
+        .no-findings .icon {
+            font-size: 3em;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+            border-top: 1px solid #dee2e6;
+            margin-top: 30px;
+        }
+        
+        .scan-info {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .scan-info h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .info-label {
+            font-weight: bold;
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+        
+        .info-value {
+            color: #333;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .header {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .summary-cards {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔒 Semgrep Security Scan Report</h1>
+            <div class="subtitle">Comprehensive security analysis results</div>
+        </div>
+        
+        <div class="scan-info">
+            <h3>📋 Scan Information</h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Repository</div>
+                    <div class="info-value">{{ repository_url }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Commit SHA</div>
+                    <div class="info-value">{{ commit_sha }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Scan Date</div>
+                    <div class="info-value">{{ scan_date }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Semgrep Version</div>
+                    <div class="info-value">{{ semgrep_version }}</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="summary-cards">
+            <div class="summary-card">
+                <h3>Total Findings</h3>
+                <div class="number">{{ total_findings }}</div>
+            </div>
+            <div class="summary-card">
+                <h3>High Severity</h3>
+                <div class="number severity-high">{{ high_severity_count }}</div>
+            </div>
+            <div class="summary-card">
+                <h3>Medium Severity</h3>
+                <div class="number severity-medium">{{ medium_severity_count }}</div>
+            </div>
+            <div class="summary-card">
+                <h3>Low Severity</h3>
+                <div class="number severity-low">{{ low_severity_count }}</div>
+            </div>
+        </div>
+        
+        {% if findings %}
+            <div class="findings-section">
+                <div class="findings-header">
+                    <h2>🚨 Security Findings</h2>
+                    <div class="description">Detailed analysis of identified security issues</div>
+                </div>
+                
+                {% for finding in findings %}
+                <div class="finding-item">
+                    <div class="finding-header">
+                        <div class="finding-title">{{ finding.rule_id }}</div>
+                        <div class="finding-severity severity-{{ finding.level.lower() }}">
+                            {{ finding.level }}
+                        </div>
+                    </div>
+                    
+                    <div class="finding-message">{{ finding.message }}</div>
+                    
+                    {% if finding.code %}
+                    <div class="finding-details">
+                        <strong>Vulnerable Code:</strong><br>
+                        {{ finding.code }}
+                    </div>
+                    {% endif %}
+                    
+                    <div class="finding-location">
+                        <strong>File:</strong> {{ finding.path }}<br>
+                        <strong>Line:</strong> {{ finding.start.line }}{% if finding.end.line != finding.start.line %}-{{ finding.end.line }}{% endif %}
+                    </div>
+                    
+                    {% if finding.tags %}
+                    <div class="finding-tags">
+                        {% for tag in finding.tags %}
+                        <span class="tag">{{ tag }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="findings-section">
+                <div class="no-findings">
+                    <div class="icon">✅</div>
+                    <h3>No Security Issues Found</h3>
+                    <p>Great job! No security vulnerabilities were detected in this scan.</p>
+                </div>
+            </div>
+        {% endif %}
+        
+        <div class="footer">
+            <p>Report generated by Semgrep Security Scanner</p>
+            <p>For more information about these findings, please refer to the Semgrep documentation</p>
+        </div>
+    </div>
+</body>
+</html>

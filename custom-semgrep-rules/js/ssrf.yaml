@@ -1,0 +1,16 @@
+rules:
+  - id: js-ssrf
+    patterns:
+      - pattern: |
+          fetch($USER_INPUT)
+      - pattern: |
+          axios.get($USER_INPUT)
+      - pattern: |
+          request($USER_INPUT)
+      - pattern: |
+          http.get($USER_INPUT)
+    message: "Server-side request forgery: User input directly used in HTTP requests"
+    severity: ERROR
+    languages: [javascript, typescript]
+    category: security
+    tags: [ssrf, server-side-request-forgery, user-input]

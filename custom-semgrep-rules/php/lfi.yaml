@@ -1,0 +1,18 @@
+rules:
+  - id: php-lfi
+    patterns:
+      - pattern: |
+          include($USER_INPUT)
+      - pattern: |
+          require($USER_INPUT)
+      - pattern: |
+          include_once($USER_INPUT)
+      - pattern: |
+          require_once($USER_INPUT)
+      - pattern: |
+          file_get_contents($USER_INPUT)
+    message: "Local file inclusion: User input directly used in file inclusion functions"
+    severity: ERROR
+    languages: [php]
+    category: security
+    tags: [lfi, local-file-inclusion, user-input]
