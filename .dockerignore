@@ -36,3 +36,7 @@ docker-compose.yml
 
 # Test files
 test-docker.sh
+
+# Configuration files
+webserver-config.env
+*.env

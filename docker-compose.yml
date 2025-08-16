@@ -13,6 +13,11 @@ services:
     working_dir: /workspace
     environment:
       - SEMGREP_VERSION=${SEMGREP_VERSION:-latest}
+      - WEBSERVER_URL=${WEBSERVER_URL:-http://webserver.local/api/results}
+      - API_KEY=${API_KEY:-}
+      - COMMIT_SHA=${COMMIT_SHA:-abc123}
+      - REPOSITORY_URL=${REPOSITORY_URL:-https://github.com/user/repo.git}
     # Example usage (uncomment to run automatically)
-    # command: ["abc123", "https://github.com/user/repo.git", "--output-format", "sarif"]
+    # command: ["abc123", "https://github.com/user/repo.git", "--api-key", "${API_KEY}"]
     # Or run interactively with: docker-compose run --rm semgrep-scanner
+    # Or run with webserver integration: API_KEY=your-key docker-compose run --rm semgrep-scanner

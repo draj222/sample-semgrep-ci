@@ -14,6 +14,8 @@ usage() {
     echo "  --output-format <format>  Output format (sarif, json, text) [default: json]"
     echo "  --output-file <file>      Output file path [default: semgrep-results.<format>]"
     echo "  --html-report <file>      HTML report file path [default: security-report.html]"
+    echo "  --webserver-url <url>     Internal webserver URL [default: http://webserver.local/api/results]"
+    echo "  --api-key <key>           API key for webserver authentication"
     echo "  --config <rules>          Additional Semgrep rule configurations"
     echo "  --help                    Show this help message"
     echo ""
@@ -21,6 +23,7 @@ usage() {
     echo "  $0 abc123 https://github.com/user/repo.git"
     echo "  $0 abc123 https://github.com/user/repo.git --output-format sarif --html-report report.html"
     echo "  $0 abc123 https://github.com/user/repo.git --config p/default --config ./custom-semgrep-rules/"
+    echo "  $0 abc123 https://github.com/user/repo.git --api-key your-api-key"
 }
 
 # Function to cleanup temporary files
@@ -28,6 +31,103 @@ cleanup() {
     if [ -n "$TEMP_DIR" ] && [ -d "$TEMP_DIR" ]; then
         echo "Cleaning up temporary directory..."
         rm -rf "$TEMP_DIR"
+    fi
+}
+
+# Function to post results to webserver
+post_to_webserver() {
+    local json_file="$1"
+    local commit_sha="$2"
+    local repo_url="$3"
+    local webserver_url="$4"
+    local api_key="$5"
+    
+    if [ -z "$api_key" ]; then
+        echo "⚠️  No API key provided, skipping webserver POST"
+        return 0
+    fi
+    
+    if [ ! -f "$json_file" ]; then
+        echo "⚠️  JSON results file not found, skipping webserver POST"
+        return 0
+    fi
+    
+    echo "📡 Posting results to internal webserver..."
+    
+    # Parse JSON results to extract findings and summary
+    if command -v jq &> /dev/null; then
+        # Extract findings array
+        FINDINGS=$(jq -c '.runs[].results // []' "$json_file" 2>/dev/null || echo '[]')
+        
+        # Count errors and warnings
+        ERRORS=$(jq '.runs[].results[] | select(.level == "error") | length' "$json_file" 2>/dev/null | awk '{sum += $1} END {print sum+0}')
+        WARNINGS=$(jq '.runs[].results[] | select(.level == "warning") | length' "$json_file" 2>/dev/null | awk '{sum += $1} END {print sum+0}')
+        
+        # Create payload
+        PAYLOAD=$(jq -n \
+            --arg commit "$commit_sha" \
+            --arg repo "$repo_url" \
+            --argjson findings "$FINDINGS" \
+            --argjson errors "$ERRORS" \
+            --argjson warnings "$WARNINGS" \
+            '{
+                commit: $commit,
+                repository: $repo,
+                findings: $findings,
+                summary: {
+                    errors: $errors,
+                    warnings: $warnings
+                },
+                timestamp: now | strftime("%Y-%m-%dT%H:%M:%SZ"),
+                scan_id: (now | tostring)
+            }')
+        
+        # POST to webserver
+        RESPONSE=$(curl -s -w "%{http_code}" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: $api_key" \
+            -d "$PAYLOAD" \
+            "$webserver_url" 2>/dev/null)
+        
+        HTTP_CODE="${RESPONSE: -3}"
+        RESPONSE_BODY="${RESPONSE%???}"
+        
+        if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 201 ]; then
+            echo "✅ Successfully posted results to webserver (HTTP $HTTP_CODE)"
+            if [ -n "$RESPONSE_BODY" ]; then
+                echo "📋 Response: $RESPONSE_BODY"
+            fi
+        else
+            echo "❌ Failed to post to webserver (HTTP $HTTP_CODE)"
+            if [ -n "$RESPONSE_BODY" ]; then
+                echo "📋 Error response: $RESPONSE_BODY"
+            fi
+        fi
+        
+    else
+        echo "⚠️  jq not available, using fallback method for webserver POST"
+        
+        # Fallback: create simple payload without jq
+        TOTAL_FINDINGS=$(grep -c '"ruleId"' "$json_file" 2>/dev/null || echo "0")
+        ERRORS=$(grep -c '"level": "error"' "$json_file" 2>/dev/null || echo "0")
+        WARNINGS=$(grep -c '"level": "warning"' "$json_file" 2>/dev/null || echo "0")
+        
+        PAYLOAD="{\"commit\":\"$commit_sha\",\"repository\":\"$repo_url\",\"findings\":[],\"summary\":{\"errors\":$ERRORS,\"warnings\":$WARNINGS},\"total_findings\":$TOTAL_FINDINGS}"
+        
+        RESPONSE=$(curl -s -w "%{http_code}" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: $api_key" \
+            -d "$PAYLOAD" \
+            "$webserver_url" 2>/dev/null)
+        
+        HTTP_CODE="${RESPONSE: -3}"
+        if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 201 ]; then
+            echo "✅ Successfully posted results to webserver (HTTP $HTTP_CODE)"
+        else
+            echo "❌ Failed to post to webserver (HTTP $HTTP_CODE)"
+        fi
     fi
 }
 
@@ -49,6 +149,8 @@ shift 2
 OUTPUT_FORMAT="json"
 OUTPUT_FILE=""
 HTML_REPORT="security-report.html"
+WEBSERVER_URL="http://webserver.local/api/results"
+API_KEY=""
 ADDITIONAL_CONFIGS=""
 
 # Parse options
@@ -64,6 +166,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --html-report)
             HTML_REPORT="$2"
+            shift 2
+            ;;
+        --webserver-url)
+            WEBSERVER_URL="$2"
+            shift 2
+            ;;
+        --api-key)
+            API_KEY="$2"
             shift 2
             ;;
         --config)
@@ -106,6 +216,12 @@ echo "Repository: $REPO_URL"
 echo "Output format: $OUTPUT_FORMAT"
 echo "Output file: $OUTPUT_FILE"
 echo "HTML report: $HTML_REPORT"
+echo "Webserver URL: $WEBSERVER_URL"
+if [ -n "$API_KEY" ]; then
+    echo "API Key: ${API_KEY:0:8}..."
+else
+    echo "API Key: Not provided (webserver POST disabled)"
+fi
 
 # Create temporary directory
 TEMP_DIR=$(mktemp -d)
@@ -182,6 +298,12 @@ if eval $SEMGREP_CMD; then
         fi
     fi
     
+    # POST results to webserver
+    if [ -n "$API_KEY" ]; then
+        echo ""
+        post_to_webserver "$OUTPUT_FILE" "$COMMIT_SHA" "$REPO_URL" "$WEBSERVER_URL" "$API_KEY"
+    fi
+    
     # Display summary
     echo ""
     echo "📈 Scan Summary:"
@@ -233,5 +355,8 @@ echo "🎉 Security scan completed successfully!"
 echo "📁 Raw results: $OUTPUT_FILE"
 if [ -f "$HTML_REPORT" ]; then
     echo "🌐 HTML report: $HTML_REPORT"
+fi
+if [ -n "$API_KEY" ]; then
+    echo "📡 Results posted to: $WEBSERVER_URL"
 fi
 

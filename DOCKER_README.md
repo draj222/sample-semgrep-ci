@@ -1,6 +1,6 @@
 # Semgrep Docker Image with Custom Rules
 
-This Docker image packages Semgrep with custom security rules, making it portable across different environments. The image includes an entrypoint script that accepts a commit SHA and repository clone URL for automated scanning, and generates both JSON findings and HTML reports for human review.
+This Docker image packages Semgrep with custom security rules, making it portable across different environments. The image includes an entrypoint script that accepts a commit SHA and repository clone URL for automated scanning, generates both JSON findings and HTML reports for human review, and automatically POSTs results to an internal webserver for artifact storage.
 
 ## Features
 
@@ -8,6 +8,7 @@ This Docker image packages Semgrep with custom security rules, making it portabl
 - **Custom Rules**: Pre-packaged security rules for Go, JavaScript, and PHP
 - **Automated Workflow**: Clone repository, checkout specific commit, scan, and cleanup
 - **Dual Output**: JSON findings for machine processing + HTML reports for human review
+- **Webserver Integration**: Automatic POST of results to internal webserver with authentication
 - **Flexible Output**: Support for SARIF, JSON, and text output formats
 - **Clean Environment**: Temporary workspace with automatic cleanup
 
@@ -43,10 +44,16 @@ make test
 docker run --rm -v $(pwd):/workspace semgrep-custom:latest \
   abc123 https://github.com/user/repo.git
 
-# With custom output format and HTML report
+# With webserver integration
 docker run --rm -v $(pwd):/workspace semgrep-custom:latest \
   abc123 https://github.com/user/repo.git \
-  --output-format json --html-report my-report.html
+  --api-key your-api-key
+
+# With custom webserver URL
+docker run --rm -v $(pwd):/workspace semgrep-custom:latest \
+  abc123 https://github.com/user/repo.git \
+  --api-key your-api-key \
+  --webserver-url https://your-server.com/api/results
 ```
 
 ### 4. Using Docker Compose
@@ -55,9 +62,11 @@ docker run --rm -v $(pwd):/workspace semgrep-custom:latest \
 # Interactive mode
 docker-compose run --rm semgrep-scanner
 
-# Run with specific command
-docker-compose run --rm semgrep-scanner \
-  abc123 https://github.com/user/repo.git --output-format json
+# Run with webserver integration
+API_KEY=your-key docker-compose run --rm semgrep-scanner
+
+# Run with custom configuration
+WEBSERVER_URL=https://your-server.com/api/results API_KEY=your-key docker-compose run --rm semgrep-scanner
 ```
 
 ## Usage
@@ -74,6 +83,8 @@ The entrypoint script accepts the following arguments:
 - `--output-format <format>`: Output format (sarif, json, text) [default: json]
 - `--output-file <file>`: Output file path [default: semgrep-results.<format>]
 - `--html-report <file>`: HTML report file path [default: security-report.html]
+- `--webserver-url <url>`: Internal webserver URL [default: http://webserver.local/api/results]
+- `--api-key <key>`: API key for webserver authentication
 - `--config <rules>`: Additional Semgrep rule configurations
 - `--help`: Show help message
 
@@ -84,16 +95,79 @@ The entrypoint script accepts the following arguments:
 docker run --rm -v $(pwd):/workspace semgrep-custom:latest \
   abc123def456 https://github.com/example/repo.git
 
-# Scan with JSON output and custom HTML report
+# Scan with webserver integration
 docker run --rm -v $(pwd):/workspace semgrep-custom:latest \
   abc123def456 https://github.com/example/repo.git \
-  --output-format json --html-report security-scan.html
+  --api-key your-secure-api-key
+
+# Scan with custom webserver and HTML report
+docker run --rm -v $(pwd):/workspace semgrep-custom:latest \
+  abc123def456 https://github.com/example/repo.git \
+  --api-key your-secure-api-key \
+  --webserver-url https://security-server.internal/api/scan-results \
+  --html-report detailed-report.html
 
 # Scan with additional rule configurations
 docker run --rm -v $(pwd):/workspace semgrep-custom:latest \
   abc123def456 https://github.com/example/repo.git \
+  --api-key your-secure-api-key \
   --config p/default --config p/security
 ```
+
+## Webserver Integration
+
+### Overview
+
+After each successful scan, the container automatically POSTs scan results to an internal webserver, ensuring raw artifacts are stored for later retrieval and analysis.
+
+### Payload Format
+
+The webserver receives a JSON payload with the following structure:
+
+```json
+{
+  "commit": "abc123def456...",
+  "repository": "https://github.com/user/repo.git",
+  "findings": [...],
+  "summary": {
+    "errors": 5,
+    "warnings": 12
+  },
+  "timestamp": "2024-01-15T10:30:00Z",
+  "scan_id": "1705312200.123"
+}
+```
+
+### Authentication
+
+- **Header**: `X-API-Key: your-secure-api-key`
+- **Content-Type**: `application/json`
+- **Method**: `POST`
+
+### Configuration
+
+Create a `webserver-config.env` file based on the example:
+
+```bash
+# Copy the example configuration
+cp webserver-config.env.example webserver-config.env
+
+# Edit with your actual values
+nano webserver-config.env
+```
+
+Example configuration:
+```bash
+WEBSERVER_URL=https://your-internal-server.com/api/security-results
+API_KEY=your-secure-randomly-generated-key
+```
+
+### Environment Variables
+
+- `WEBSERVER_URL`: Internal webserver endpoint [default: http://webserver.local/api/results]
+- `API_KEY`: Authentication key for webserver access
+- `COMMIT_SHA`: Git commit SHA to scan
+- `REPOSITORY_URL`: Repository URL to clone
 
 ## Workflow
 
@@ -103,8 +177,9 @@ The Docker container performs the following automated workflow:
 2. **Checkout Commit**: Switches to the exact commit SHA for scanning
 3. **Run Semgrep**: Executes security scan with custom rules and default rules
 4. **Generate Output**: Creates JSON findings and HTML report
-5. **Copy Results**: Copies all output files to the mounted workspace
-6. **Cleanup**: Automatically removes temporary files and cloned repository
+5. **POST to Webserver**: Sends results to internal webserver with authentication
+6. **Copy Results**: Copies all output files to the mounted workspace
+7. **Cleanup**: Automatically removes temporary files and cloned repository
 
 ## Output Files
 
@@ -117,6 +192,11 @@ The Docker container performs the following automated workflow:
 - **Format**: Beautiful, human-readable HTML report
 - **Content**: Summary dashboard, detailed findings, severity breakdown
 - **Use Case**: Security team review, stakeholder presentations, documentation
+
+### Webserver Storage
+- **Format**: Structured JSON payload with metadata
+- **Content**: Commit info, findings array, severity summary, timestamps
+- **Use Case**: Centralized artifact storage, historical analysis, compliance tracking
 
 ### Report Features
 - **Summary Cards**: Total findings, severity breakdown, scan metadata
@@ -148,35 +228,46 @@ The image includes pre-packaged custom security rules for:
 
 ## Integration Examples
 
-### CI/CD Pipeline
+### CI/CD Pipeline with Webserver Integration
 
 ```yaml
 # GitHub Actions example
 - name: Run Semgrep Scan
+  env:
+    API_KEY: ${{ secrets.WEBSERVER_API_KEY }}
+    WEBSERVER_URL: ${{ secrets.WEBSERVER_URL }}
   run: |
     docker run --rm \
       -v ${{ github.workspace }}:/workspace \
+      -e API_KEY=$API_KEY \
+      -e WEBSERVER_URL=$WEBSERVER_URL \
       semgrep-custom:latest \
       ${{ github.sha }} \
       ${{ github.repositoryUrl }} \
-      --output-file semgrep-results.json \
-      --html-report security-report.html
+      --api-key $API_KEY \
+      --webserver-url $WEBSERVER_URL
 ```
 
 ### Jenkins Pipeline
 
 ```groovy
 stage('Security Scan') {
+    environment {
+        API_KEY = credentials('webserver-api-key')
+        WEBSERVER_URL = 'https://security-server.internal/api/results'
+    }
     steps {
         script {
             sh '''
                 docker run --rm \
                   -v ${WORKSPACE}:/workspace \
+                  -e API_KEY=${API_KEY} \
+                  -e WEBSERVER_URL=${WEBSERVER_URL} \
                   semgrep-custom:latest \
                   ${GIT_COMMIT} \
                   ${GIT_URL} \
-                  --output-file results.json \
-                  --html-report jenkins-report.html
+                  --api-key ${API_KEY} \
+                  --webserver-url ${WEBSERVER_URL}
             '''
         }
     }
@@ -189,12 +280,27 @@ stage('Security Scan') {
 security_scan:
   stage: test
   image: semgrep-custom:latest
+  variables:
+    WEBSERVER_URL: "https://security-server.internal/api/results"
   script:
-    - /app/entrypoint.sh $CI_COMMIT_SHA $CI_REPOSITORY_URL
+    - /app/entrypoint.sh $CI_COMMIT_SHA $CI_REPOSITORY_URL --api-key $WEBSERVER_API_KEY
   artifacts:
     paths:
       - semgrep-results.json
       - security-report.html
+```
+
+### Using Makefile
+
+```bash
+# Basic scan
+make scan-example
+
+# Scan with webserver integration
+API_KEY=your-key make scan-with-webserver
+
+# Generate HTML from existing results
+make generate-html
 ```
 
 ## Output Formats
@@ -216,6 +322,10 @@ security_scan:
 ## Environment Variables
 
 - `SEMGREP_VERSION`: Override Semgrep version (defaults to latest)
+- `WEBSERVER_URL`: Internal webserver endpoint for results storage
+- `API_KEY`: Authentication key for webserver access
+- `COMMIT_SHA`: Git commit SHA to scan
+- `REPOSITORY_URL`: Repository URL to clone
 
 ## Troubleshooting
 
@@ -225,6 +335,7 @@ security_scan:
 2. **Git Clone Failed**: Check repository URL and access permissions
 3. **Commit Not Found**: Verify the commit SHA exists in the repository
 4. **HTML Generation Failed**: Check Python dependencies and template files
+5. **Webserver POST Failed**: Verify API key and webserver URL
 
 ### Debug Mode
 
@@ -242,6 +353,18 @@ Ensure the current directory is mounted as a volume to access output files:
 docker run --rm -v $(pwd):/workspace semgrep-custom:latest ...
 ```
 
+### Webserver Issues
+
+```bash
+# Test webserver connectivity
+curl -H "X-API-Key: your-key" http://webserver.local/api/results
+
+# Check webserver logs
+docker logs your-webserver-container
+
+# Verify API key format and permissions
+```
+
 ## Security Considerations
 
 - The image runs in a temporary, isolated environment
@@ -249,6 +372,8 @@ docker run --rm -v $(pwd):/workspace semgrep-custom:latest ...
 - Temporary files are automatically cleaned up on exit
 - Custom rules are read-only mounted
 - No persistent state between scans
+- API keys are passed securely via environment variables
+- Webserver communication uses HTTPS (when configured)
 
 ## Contributing
 

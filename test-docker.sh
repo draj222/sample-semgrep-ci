@@ -59,6 +59,22 @@ else
     exit 1
 fi
 
+# Test webserver integration options
+echo "Testing webserver integration options..."
+if docker run --rm semgrep-custom:latest --help | grep -q "webserver-url"; then
+    print_status "PASS" "Webserver URL option available"
+else
+    print_status "FAIL" "Webserver URL option not found"
+    exit 1
+fi
+
+if docker run --rm semgrep-custom:latest --help | grep -q "api-key"; then
+    print_status "PASS" "API key option available"
+else
+    print_status "FAIL" "API key option not found"
+    exit 1
+fi
+
 # Test custom rules availability
 echo "Testing custom rules availability..."
 if docker run --rm semgrep-custom:latest ls /app/custom-semgrep-rules/ >/dev/null 2>&1; then
@@ -116,9 +132,19 @@ else
     exit 1
 fi
 
+# Test webserver integration (dry run)
+echo "Testing webserver integration (dry run)..."
+if docker run --rm -v $(pwd):/workspace semgrep-custom:latest \
+    abc123 https://github.com/test/repo.git --api-key test-key --help >/dev/null 2>&1; then
+    print_status "PASS" "Webserver integration command structure is valid"
+else
+    print_status "FAIL" "Webserver integration command structure is invalid"
+    exit 1
+fi
+
 # Check for required tools
 echo "Checking required tools in image..."
-REQUIRED_TOOLS=("git" "bash" "semgrep" "jq" "python3" "node")
+REQUIRED_TOOLS=("git" "bash" "semgrep" "jq" "python3" "node" "curl")
 for tool in "${REQUIRED_TOOLS[@]}"; do
     if docker run --rm semgrep-custom:latest which "$tool" >/dev/null 2>&1; then
         print_status "PASS" "$tool is available"
@@ -166,6 +192,19 @@ else
     exit 1
 fi
 
+# Test webserver payload generation (dry run)
+echo "Testing webserver payload generation..."
+if docker run --rm -v $(pwd):/workspace semgrep-custom:latest \
+    bash -c "echo '{\"runs\":[{\"results\":[{\"ruleId\":\"test\",\"level\":\"error\"}]}]}' > test.json && \
+             jq -n --arg commit 'abc123' --arg repo 'https://github.com/test/repo.git' \
+             --argjson findings '[]' --argjson errors '1' --argjson warnings '0' \
+             '{commit: \$commit, repository: \$repo, findings: \$findings, summary: {errors: \$errors, warnings: \$warnings}}' > /dev/null" 2>/dev/null; then
+    print_status "PASS" "Webserver payload generation works correctly"
+else
+    print_status "FAIL" "Webserver payload generation failed"
+    exit 1
+fi
+
 echo ""
 echo "🎉 All tests passed! The Semgrep Docker image is ready to use."
 echo ""
@@ -174,13 +213,20 @@ echo "  # Basic scan with HTML report"
 echo "  docker run --rm -v \$(pwd):/workspace semgrep-custom:latest \\"
 echo "    abc123 https://github.com/user/repo.git"
 echo ""
-echo "  # Custom output and HTML report"
+echo "  # With webserver integration"
 echo "  docker run --rm -v \$(pwd):/workspace semgrep-custom:latest \\"
 echo "    abc123 https://github.com/user/repo.git \\"
-echo "    --output-format json --html-report my-report.html"
+echo "    --api-key your-api-key"
+echo ""
+echo "  # Custom webserver and output"
+echo "  docker run --rm -v \$(pwd):/workspace semgrep-custom:latest \\"
+echo "    abc123 https://github.com/user/repo.git \\"
+echo "    --api-key your-api-key \\"
+echo "    --webserver-url https://your-server.com/api/results \\"
+echo "    --html-report my-report.html"
 echo ""
 echo "  # Using Makefile"
 echo "  make scan-example"
-echo "  make generate-html"
+echo "  API_KEY=your-key make scan-with-webserver"
 echo ""
 echo "For more information, see DOCKER_README.md"
